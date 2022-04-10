@@ -156,6 +156,7 @@ const queue = {
     var top = current_level;
     current_level = undefined;
     queue.add(top);
+    queue.save();
     return 'Ok, adding the current level back into the queue.';
   },
 
