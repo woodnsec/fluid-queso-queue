@@ -91,13 +91,17 @@ const queue = {
     }
   },
 
-  modRemove: (username) => {
-    if (username == '') {
+  modRemove: (usernameArgument) => {
+    if (usernameArgument == '') {
       return "You can use !remove <username> to kick out someone else's level;  if you want to skip the current one, use !next.";
     }
 
-    levels = levels.filter(x => x.submitter != username);
-    return "Ok, I removed " + username + "'s level from the queue.";
+    var match = queue.matchUsername(usernameArgument);
+    if (!levels.some(match)) {
+      return "No levels from " + usernameArgument + " in the queue.";
+    }
+    levels = levels.filter(level => !match(level));
+    return "Ok, I removed " + usernameArgument + "'s level from the queue.";
   },
 
   remove: (username) => {
@@ -197,8 +201,8 @@ const queue = {
     return current_level;
   },
 
-  dip: (username) => {
-    var index = levels.findIndex(x => x.submitter == username);
+  dip: (usernameArgument) => {
+    var index = levels.findIndex(queue.matchUsername(usernameArgument));
     if (index != -1) {
       current_level = levels[index];
       levels.splice(index, 1);
@@ -305,6 +309,14 @@ const queue = {
     return {
       online: online,
       offline: offline
+    };
+  },
+
+  matchUsername: (usernameArgument) => {
+    usernameArgument = usernameArgument.trim().replace(/^@/, '');
+    return level => {
+      // display name (submitter) or user name (username) matches
+      return level.submitter == usernameArgument || level.username == usernameArgument;
     };
   },
 
