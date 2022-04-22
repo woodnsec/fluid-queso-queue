@@ -10,8 +10,7 @@
   },
   "scripts": {
     "test": "jest",
-    "start": "node index.js",
-    "prepublish": "pap"
+    "start": "node index.js"
   },
   "devDependencies": {
     "@babel/code-frame": "^7.16.7",
