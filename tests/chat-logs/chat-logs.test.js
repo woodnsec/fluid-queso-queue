@@ -70,8 +70,15 @@ fetch.mockImplementation(() =>
 jest.useFakeTimers();
 
 const setTime = (time) => {
-    const newTime = new Date(`2022-04-21T${time}Z`);
-    const diff = newTime - mockTime;
+    var newTime = new Date(`2022-04-21T${time}Z`);
+    var diff = newTime - mockTime;
+    if (diff < 0) {
+        // add one day in case of time going backwards
+        // TODO: do this better
+        newTime = new Date(`2022-04-22T${time}Z`);
+        diff = newTime - mockTime;
+    }
+
     if (diff > 0) {
         jest.advanceTimersByTime(diff);
     } else if (diff < 0) {
@@ -109,11 +116,15 @@ beforeEach(() => {
     vol.reset();
 });
 // load index.js and test it being setup correctly
-const requireIndex = () => {
+function requireIndex(mockOriginalFs = undefined) {
     let index;
     let fs;
 
     jest.isolateModules(() => {
+        // reuse filesystem when restarting
+        if (mockOriginalFs !== undefined) {
+            jest.mock('fs', () => mockOriginalFs);
+        }
         index = require('../../index.js');
         fs = require('fs');
         fs.mkdirSync(path.resolve('.'), { recursive: true });
@@ -260,10 +271,10 @@ const parseMessage = (line) => {
 const testFiles = fs.readdirSync(path.resolve(__dirname, 'logs')).filter(file => file.endsWith('.test.log'));
 
 for (const file of testFiles) {
-    
+
     const fileName = path.relative('.', path.resolve(__dirname, `logs/${file}`));
     test(fileName, async () => {
-        const index = requireIndex();
+        var index = requireIndex();
         var handler = index.handle_func;
 
         var replyMessageQueue = [];
@@ -290,9 +301,13 @@ for (const file of testFiles) {
                 continue;
             }
             const idx = line.indexOf(' ');
-            const command = line.substring(0, idx);
-            const rest = line.substring(idx + 1);
-            if (command == 'settings') {
+            const command = idx == -1 ? line : line.substring(0, idx);
+            const rest = idx == -1 ? undefined : line.substring(idx + 1);
+            if (command == 'restart') {
+                index = requireIndex(index.fs);
+                handler = index.handle_func;
+                index.chatbot_helper.say.mockImplementation(pushMessageWithStack);
+            } else if (command == 'settings') {
                 replaceSettings(index.settings, JSON.parse(rest));
             } else if (command == 'chatters') {
                 setChatters(JSON.parse(rest));
