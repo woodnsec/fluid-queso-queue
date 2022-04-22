@@ -1,0 +1,27 @@
+{
+  "name": "fluid-queso-queue",
+  "version": "1.0.0",
+  "description": "fluid-queso-queue is a version of QuesoQueue with enhancements and added functionality.",
+  "license": "GPL-3.0",
+  "main": "index.js",
+  "dependencies": {
+    "node-fetch": "^2.6.1",
+    "tmi.js": "^1.8.5"
+  },
+  "scripts": {
+    "test": "jest",
+    "start": "node index.js"
+  },
+  "devDependencies": {
+    "@babel/code-frame": "^7.16.7",
+    "assert": "^2.0.0",
+    "jest": "^27.5.1",
+    "jest-chance": "^0.1.11",
+    "memfs": "^3.4.1",
+    "readline": "^1.3.0",
+    "timekeeper": "^2.2.0"
+  },
+  "jest": {
+    "globalSetup": "jest-chance"
+  }
+}
