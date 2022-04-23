@@ -1,8 +1,5 @@
 'use strict';
 
-// imports
-var tk = require('timekeeper');
-
 // constants
 const defaultTestChatters = {
     _links: {},
@@ -21,15 +18,12 @@ const defaultTestSettings = {
 
 // mock variables
 var mockChatters = undefined;
-var mockTime = undefined;
 
 // mocks
 jest.mock('node-fetch', () => jest.fn());
-jest.mock('../settings.js', () => { return { ...defaultTestSettings }; });
 
 // only import after mocking!
 const fetch = require("node-fetch");
-const settings = require('../settings.js');
 
 // mock fetch
 fetch.mockImplementation(() =>
@@ -59,12 +53,12 @@ const setChatters = (newChatters) => {
 };
 
 beforeEach(() => {
+    // reset fetch
     fetch.mockClear();
     setChatters(defaultTestChatters);
-    replaceSettings(settings, defaultTestSettings);
-    // fake time
-    mockTime = new Date('2022-04-21T00:00:00Z');
-    tk.freeze(mockTime);
+
+    // reset time
+    jest.setSystemTime(new Date('2022-04-21T00:00:00Z'));
 });
 
 const build_chatter = function (username, displayName, isSubscriber, isMod, isBroadcaster) {
@@ -81,8 +75,15 @@ test('online users', async () => {
     let twitch;
     let settings;
     jest.isolateModules(() => {
-        twitch = require('../twitch.js').twitch();
+        // setup settings mock
+        jest.mock('../settings.js', () => { return {}; });
+
+        // import settings and replace them
         settings = require('../settings.js');
+        replaceSettings(settings, defaultTestSettings);
+
+        // import twitch.js
+        twitch = require('../twitch.js').twitch();
     });
 
     expect(settings.channel).toBe('queso_queue_test_channel');
@@ -94,17 +95,17 @@ test('online users', async () => {
     setChatters({ broadcaster: ['liquidnya'], vips: ['redzebra_'], moderators: ['helperblock'], staff: [], admins: [], global_mods: [], viewers: [] });
     await expect(twitch.getOnlineUsers(settings.channel)).resolves.toEqual(new Set(['liquidnya', 'helperblock', 'redzebra_']));
 
-    tk.freeze(new Date('2022-04-21T00:00:00Z'));
+    jest.setSystemTime(new Date('2022-04-21T00:00:00Z'));
     // notice chatter
     twitch.noticeChatter(build_chatter('furretwalkbot', 'FurretWalkBot', false, true, false));
     await expect(twitch.getOnlineUsers(settings.channel)).resolves.toEqual(new Set(['liquidnya', 'helperblock', 'redzebra_', 'furretwalkbot']));
 
     // after 4 minutes still online!
-    tk.freeze(new Date('2022-04-21T00:04:00Z'));
+    jest.setSystemTime(new Date('2022-04-21T00:04:00Z'));
     await expect(twitch.getOnlineUsers(settings.channel)).resolves.toEqual(new Set(['liquidnya', 'helperblock', 'redzebra_', 'furretwalkbot']));
 
     // after 5 minutes not online any longer
-    tk.freeze(new Date('2022-04-21T00:05:00Z'));
+    jest.setSystemTime(new Date('2022-04-21T00:05:00Z'));
     await expect(twitch.getOnlineUsers(settings.channel)).resolves.toEqual(new Set(['liquidnya', 'helperblock', 'redzebra_']));
 
     // test the lurking feature
