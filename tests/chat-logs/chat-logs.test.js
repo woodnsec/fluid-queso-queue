@@ -2,7 +2,6 @@
 
 // imports
 const jestChance = require('jest-chance');
-var tk = require('timekeeper');
 const readline = require('readline');
 const { fail } = require('assert');
 const { Volume } = require('memfs');
@@ -32,7 +31,6 @@ const isPronoun = (text) => {
 
 // mock variables
 var mockChatters = undefined;
-var mockTime = undefined;
 
 // mocks
 jest.mock('../../chatbot.js');
@@ -51,23 +49,40 @@ fetch.mockImplementation(() =>
 // fake timers
 jest.useFakeTimers();
 
-const setTime = (time) => {
+const flushPromises = () => {
+    return new Promise(jest.requireActual("timers").setImmediate);
+};
+
+const advanceTime = async (ms, accuracy = 0) => {
+    // advance by accuracy intervals
+    if (accuracy > 0) {
+        for (let i = 0; i < ms; i += accuracy) {
+            let advance = Math.min(accuracy, ms - i);
+            jest.advanceTimersByTime(advance);
+            await flushPromises();
+        }
+    } else {
+        jest.advanceTimersByTime(ms);
+        await flushPromises();
+    }
+};
+
+const setTime = async (time, accuracy = 0) => {
+    let prevTime = new Date();
     var newTime = new Date(`2022-04-21T${time}Z`);
-    var diff = newTime - mockTime;
+    var diff = newTime - prevTime;
     if (diff < 0) {
         // add one day in case of time going backwards
         // TODO: do this better
         newTime = new Date(`2022-04-22T${time}Z`);
-        diff = newTime - mockTime;
+        diff = newTime - prevTime;
     }
 
     if (diff > 0) {
-        jest.advanceTimersByTime(diff);
+        await advanceTime(diff, accuracy);
     } else if (diff < 0) {
         fail(`Time went backwards, from ${mockTime} to ${newTime} (${time})`);
     }
-    mockTime = newTime;
-    tk.freeze(mockTime);
 }
 
 const replaceSettings = (settings, newSettings) => {
@@ -93,8 +108,7 @@ beforeEach(() => {
     setChatters(defaultTestChatters);
 
     // reset time
-    mockTime = new Date('2022-04-21T00:00:00Z');
-    tk.freeze(mockTime);
+    jest.setSystemTime(new Date('2022-04-21T00:00:00Z'));
 });
 
 // load index.js and test it being setup correctly
@@ -246,6 +260,7 @@ for (const file of testFiles) {
         let test = requireIndex();
 
         var replyMessageQueue = [];
+        var accuracy = 0;
 
         function pushMessageWithStack(message) {
             let error = new Error("<Stack Trace Capture>");
@@ -285,6 +300,8 @@ for (const file of testFiles) {
             if (command == 'restart') {
                 test = requireIndex(test.fs, test.settings);
                 test.chatbot_helper.say.mockImplementation(pushMessageWithStack);
+            } else if (command == 'accuracy') {
+                accuracy = parseInt(rest);
             } else if (command == 'settings') {
                 replaceSettings(test.settings, JSON.parse(rest));
             } else if (command == 'chatters') {
@@ -306,7 +323,7 @@ for (const file of testFiles) {
                 test.random
                     .mockImplementationOnce(() => parseFloat(rest));
             } else if (command.startsWith('[') && command.endsWith(']')) {
-                setTime(command.substring(1, command.length - 1));
+                await setTime(command.substring(1, command.length - 1), accuracy);
                 // const time = new Date();
                 const chat = parseMessage(rest);
                 position = () => {
@@ -335,7 +352,12 @@ for (const file of testFiles) {
                         throw error;
                     }
                 } else {
-                    await test.handle_func(chat.message, chat.sender, test.chatbot_helper.say);
+                    try {
+                        await test.handle_func(chat.message, chat.sender, test.chatbot_helper.say);
+                    } catch (error) {
+                        error.message += errorMessage(position());
+                        throw error;
+                    }
                 }
             } else {
                 fail(`unexpected line "${line}" in file ${fileName}`);
