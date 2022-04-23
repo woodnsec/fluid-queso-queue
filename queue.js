@@ -101,6 +101,7 @@ const queue = {
       return "No levels from " + usernameArgument + " in the queue.";
     }
     levels = levels.filter(level => !match(level));
+    queue.save();
     return "Ok, I removed " + usernameArgument + "'s level from the queue.";
   },
 
@@ -109,6 +110,7 @@ const queue = {
       return "We're playing that level right now!  Don't take this away from us!";
     }
     levels = levels.filter(x => x.submitter != username);
+    queue.save();
     return username + "'s level removed from the queue.";
   },
 
