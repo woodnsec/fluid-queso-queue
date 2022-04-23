@@ -260,13 +260,3 @@ const chatbot_helper = chatbot.helper(
 );
 chatbot_helper.setup(HandleMessage);
 chatbot_helper.connect();
-
-// needed for testing
-// TODO: maybe can be removed and handled differently
-if (require.main !== module) {
-  module.exports = {
-    chatbot_helper: chatbot_helper,
-    quesoqueue: quesoqueue,
-    settings: settings,
-  }
-}

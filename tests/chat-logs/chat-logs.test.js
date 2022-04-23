@@ -117,39 +117,72 @@ beforeEach(() => {
 });
 // load index.js and test it being setup correctly
 function requireIndex(mockOriginalFs = undefined) {
-    let index;
     let fs;
+    let settings;
+    let chatbot;
+    let chatbot_helper;
+    let random;
+    let quesoqueue;
+    let handle_func;
 
     jest.isolateModules(() => {
+        // setup random mock
+        const chance = jestChance.getChance();
+        random = jest
+            .spyOn(global.Math, 'random')
+            .mockImplementation(() => {
+                return chance.random();
+            });
+
         // reuse filesystem when restarting
         if (mockOriginalFs !== undefined) {
             jest.mock('fs', () => mockOriginalFs);
         }
-        index = require('../../index.js');
+
+        // setup virtual file system
         fs = require('fs');
+        // make sure that the folder '.' exists in the virtual file system
+        // which is the folder that contains './queso.save'
         fs.mkdirSync(path.resolve('.'), { recursive: true });
+
+        // import libraries
+        settings = require('../../settings.js');
+        chatbot = require('../../chatbot.js');
+        const queue = require('../../queue.js');
+
+        // spy on the quesoqueue that index will use
+        const quesoqueueSpy = jest.spyOn(queue, 'quesoqueue');
+
+        // run index.js
+        require('../../index.js');
+
+        // get hold of the queue
+        expect(quesoqueueSpy).toHaveBeenCalledTimes(1);
+        quesoqueue = quesoqueueSpy.mock.results[0].value;
+        quesoqueueSpy.mockRestore();
     });
 
-    const chance = jestChance.getChance();
+    // get hold of chatbot_helper
+    expect(chatbot.helper).toHaveBeenCalledTimes(1);
+    chatbot_helper = chatbot.helper.mock.results[0].value;
 
-    const random = jest
-        .spyOn(global.Math, 'random')
-        .mockImplementation(() => {
-            return chance.random();
-        });
+    expect(chatbot_helper.setup).toHaveBeenCalledTimes(1)
+    expect(chatbot_helper.connect).toHaveBeenCalledTimes(1);
+    expect(chatbot_helper.setup).toHaveBeenCalledTimes(1);
+    expect(chatbot_helper.say).toHaveBeenCalledTimes(0);
 
-    expect(index.chatbot_helper.setup.mock.calls.length).toBe(1);
-    expect(index.chatbot_helper.connect.mock.calls.length).toBe(1);
-    expect(index.chatbot_helper.setup.mock.calls[0].length).toBe(1);
-    expect(index.chatbot_helper.say.mock.calls.length).toBe(0);
-    expect(index.chatbot_helper.setup.mock.calls[0][0]).toBeInstanceOf(AsyncFunction);
+    // get hold of the handle function
+    // the first argument of setup has to be an AsyncFunction
+    expect(chatbot_helper.setup.mock.calls[0][0]).toBeInstanceOf(AsyncFunction);
+    handle_func = chatbot_helper.setup.mock.calls[0][0];
 
     return {
-        handle_func: index.chatbot_helper.setup.mock.calls[0][0],
+        handle_func: handle_func,
         random: random,
         fs: fs,
         settings: settings,
-        ...index
+        chatbot_helper: chatbot_helper,
+        quesoqueue: quesoqueue,
     };
 };
 
@@ -163,56 +196,8 @@ const build_chatter = function (username, displayName, isSubscriber, isMod, isBr
     }
 }
 
-test('online users', async () => {
-    let twitch;
-    let settings;
-    jest.isolateModules(() => {
-        twitch = require('../../twitch.js').twitch();
-        settings = require('../../settings.js');
-    });
-
-    expect(settings.channel).toBe('queso_queue_test_channel');
-
-    // online users should be empty
-    await expect(twitch.getOnlineUsers(settings.channel)).resolves.toEqual(new Set([]));
-
-    // change chatters mock and compare with result
-    setChatters({ broadcaster: ['liquidnya'], vips: ['redzebra_'], moderators: ['helperblock'], staff: [], admins: [], global_mods: [], viewers: [] });
-    await expect(twitch.getOnlineUsers(settings.channel)).resolves.toEqual(new Set(['liquidnya', 'helperblock', 'redzebra_']));
-
-    tk.freeze(new Date('2022-04-21T00:00:00Z'));
-    // notice chatter
-    twitch.noticeChatter(build_chatter('furretwalkbot', 'FurretWalkBot', false, true, false));
-    await expect(twitch.getOnlineUsers(settings.channel)).resolves.toEqual(new Set(['liquidnya', 'helperblock', 'redzebra_', 'furretwalkbot']));
-
-    // after 4 minutes still online!
-    tk.freeze(new Date('2022-04-21T00:04:00Z'));
-    await expect(twitch.getOnlineUsers(settings.channel)).resolves.toEqual(new Set(['liquidnya', 'helperblock', 'redzebra_', 'furretwalkbot']));
-
-    // after 5 minutes not online any longer
-    tk.freeze(new Date('2022-04-21T00:05:00Z'));
-    await expect(twitch.getOnlineUsers(settings.channel)).resolves.toEqual(new Set(['liquidnya', 'helperblock', 'redzebra_']));
-
-    // test the lurking feature
-    twitch.setToLurk('helperblock');
-    await expect(twitch.getOnlineUsers(settings.channel)).resolves.toEqual(new Set(['liquidnya', 'redzebra_']));
-    // even when they still chat, they are not online
-    twitch.noticeChatter(build_chatter('helperblock', 'helperblock', false, true, false));
-    await expect(twitch.getOnlineUsers(settings.channel)).resolves.toEqual(new Set(['liquidnya', 'redzebra_']));
-
-    // unlurk makes them online again!
-    twitch.notLurkingAnymore('helperblock');
-    await expect(twitch.getOnlineUsers(settings.channel)).resolves.toEqual(new Set(['liquidnya', 'helperblock', 'redzebra_']));
-
-    // the twitch api has been called 8 times
-    expect(fetch.mock.calls.length).toBe(8);
-
-});
-
-
 test('setup', () => {
-    const index = requireIndex();
-    var handler = index.handle_func;
+    requireIndex();
 });
 
 const parseMessage = (line) => {
@@ -294,6 +279,11 @@ for (const file of testFiles) {
             crlfDelay: Infinity
         });
 
+        let errorMessage = (position) => {
+            let contents = codeFrameColumns(fs.readFileSync(fileName).toString(), position);
+            return '\n\n' + `given in test file ${fileName}:${lineno}` + '\n' + contents;
+        }
+
         var lineno = 0;
         for await (var line of rl) {
             lineno++;
@@ -303,6 +293,12 @@ for (const file of testFiles) {
             const idx = line.indexOf(' ');
             const command = idx == -1 ? line : line.substring(0, idx);
             const rest = idx == -1 ? undefined : line.substring(idx + 1);
+            let position = () => {
+                return {
+                    start: { column: idx + 2, line: lineno },
+                    end: { column: line.length + 1, line: lineno }
+                };
+            };
             if (command == 'restart') {
                 index = requireIndex(index.fs);
                 handler = index.handle_func;
@@ -312,7 +308,12 @@ for (const file of testFiles) {
             } else if (command == 'chatters') {
                 setChatters(JSON.parse(rest));
             } else if (command == 'queso.save') {
-                expect(JSON.parse(index.fs.readFileSync(path.resolve(__dirname, '../../queso.save')))).toEqual(JSON.parse(rest))
+                try {
+                    expect(JSON.parse(index.fs.readFileSync(path.resolve(__dirname, '../../queso.save')))).toEqual(JSON.parse(rest));
+                } catch (error) {
+                    error.message += errorMessage(position());
+                    throw error;
+                }
             } else if (command == 'seed') {
                 const chance = jestChance.getChance(rest);
                 index.random
@@ -326,30 +327,28 @@ for (const file of testFiles) {
                 setTime(command.substring(1, command.length - 1));
                 // const time = new Date();
                 const chat = parseMessage(rest);
+                position = () => {
+                    return {
+                        start: { column: idx + 1 + chat.column, line: lineno },
+                        end: { column: line.length + 1 - chat.trimLen, line: lineno }
+                    };
+                };
                 // console.log(`${time}`, chat.sender, 'sends', chat.message);
                 if (chat.sender.username == index.settings.username.toLowerCase()) {
                     // this is a message by the chat bot, check replyMessageQueue
                     let shift = replyMessageQueue.shift();
-                    let errorMessage = () => {
-                        let position = {
-                            start: { column: idx + 1 + chat.column, line: lineno },
-                            end: { column: line.length + 1 - chat.trimLen, line: lineno }
-                        };
-                        let contents = codeFrameColumns(fs.readFileSync(fileName).toString(), position);
-                        return '\n\n' + `given in test file ${fileName}:${lineno}` + '\n' + contents;
-                    }
                     if (shift === undefined) {
                         try {
                             expect(replyMessageQueue).toContain(chat.message);
                         } catch (error) {
-                            error.message += errorMessage();
+                            error.message += errorMessage(position());
                             throw error;
                         }
                     }
                     try {
                         expect(shift.message).toBe(chat.message);
                     } catch (error) {
-                        error.stack = shift.error.stack.replace(shift.error.message, error.message + errorMessage());
+                        error.stack = shift.error.stack.replace(shift.error.message, error.message + errorMessage(position()));
                         throw error;
                     }
                 } else {
