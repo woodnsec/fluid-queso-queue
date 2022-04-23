@@ -55,7 +55,7 @@ const level_list_message = (sender, current, levels) => {
 
 const next_level_message = level => {
   if (level === undefined) {
-    return 'The queue is empty.  Feed me levels!';
+    return 'The queue is empty. Feed me levels!';
   }
   return 'Next is ' + level.code + ', submitted by ' + level.submitter;
 };

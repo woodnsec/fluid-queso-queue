@@ -1,0 +1,36 @@
+# "username" will decide which of the messages are from the bot
+settings {"username":"helperblock","password":"","channel":"liquidnya","max_size":50,"level_timeout":10,"level_selection":[],"message_cooldown":5}
+# chatters 
+chatters {"_links":{},"chatter_count":4,"chatters":{"broadcaster":["liquidnya"],"vips":[],"moderators":["furretwalkbot","streamelements"],"staff":[],"admins":[],"global_mods":[],"viewers":["viewerlevels"]}}
+# chatty chat log
+# ~ broadcaster
+# @ moderator
+# % subscriber
+
+[16:26:45] ~%?liquidnya (She/Her): !open
+[16:26:45] @^helperblock: The queue is now open!
+[16:27:48] @^FurretWalkBot: !add NB0-1MD-SLG
+[16:27:48] @^helperblock (Any): FurretWalkBot, NB0-1MD-SLG has been added to the queue.
+
+queso.save [{"code":"NB0-1MD-SLG","submitter":"FurretWalkBot","username":"furretwalkbot"}]
+
+[16:27:52] @^FurretWalkBot (Any): !pos
+[16:27:58] @^FurretWalkBot (Any): !position
+[16:27:59] @^helperblock (Any): FurretWalkBot, you are currently 1st
+[16:28:23] @^FurretWalkBot (Any): !remove
+[16:28:23] @^helperblock (Any): FurretWalkBot's level removed from the queue.
+
+queso.save []
+
+[16:28:31] @^FurretWalkBot (Any): !add NB0-1MD-SLG
+[16:28:31] @^helperblock (Any): FurretWalkBot, NB0-1MD-SLG has been added to the queue.
+
+queso.save [{"code":"NB0-1MD-SLG","submitter":"FurretWalkBot","username":"furretwalkbot"}]
+
+[16:28:33] @^FurretWalkBot (Any): !leave
+[16:28:33] @^helperblock (Any): FurretWalkBot's level removed from the queue.
+
+queso.save []
+
+[16:28:37] @^FurretWalkBot (Any): !position
+[16:28:37] @^helperblock (Any): FurretWalkBot, looks like you're not in the queue. Try !add AAA-AAA-AAA.

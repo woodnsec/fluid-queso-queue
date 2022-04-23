@@ -1,3 +1,5 @@
+[![Node.js CI](https://github.com/liquidnya/fluid-queso-queue/actions/workflows/node.js.yml/badge.svg?branch=main)](https://github.com/liquidnya/fluid-queso-queue/actions/workflows/node.js.yml)
+
 These are the steps necessary to make sure your bot is authorized to perform the
 actions it needs to.  Each step will assist in filling out one of the variables
 located in `settings.js`.
