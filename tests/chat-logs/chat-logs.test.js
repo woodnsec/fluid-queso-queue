@@ -5,9 +5,10 @@ const jestChance = require('jest-chance');
 var tk = require('timekeeper');
 const readline = require('readline');
 const { fail } = require('assert');
-const { vol } = require('memfs');
+const { Volume } = require('memfs');
 const path = require('path');
-const codeFrameColumns = require('@babel/code-frame').codeFrameColumns;
+const fs = require('fs');
+const { codeFrameColumns } = require('@babel/code-frame');
 
 // constants
 const AsyncFunction = (async () => { }).constructor;
@@ -25,24 +26,9 @@ const defaultTestSettings = {
     level_selection: ['next', 'subnext', 'modnext', 'random', 'subrandom', 'modrandom'],
     message_cooldown: 5,
 };
-const pronouns = new Set([
-    "Ae/Aer",
-    "Any",
-    "E/Em",
-    "Fae/Faer",
-    "He/Him",
-    "He/She",
-    "He/They",
-    "It/Its",
-    "Other",
-    "Per/Per",
-    "She/Her",
-    "She/They",
-    "They/Them",
-    "Ve/Ver",
-    "Xe/Xem",
-    "Zie/Hir"
-]);
+const isPronoun = (text) => {
+    return text == 'Any' || text == 'Other' || text.includes('/');
+};
 
 // mock variables
 var mockChatters = undefined;
@@ -51,13 +37,9 @@ var mockTime = undefined;
 // mocks
 jest.mock('../../chatbot.js');
 jest.mock('node-fetch', () => jest.fn());
-jest.mock('fs');
-jest.mock('../../settings.js', () => { return { ...defaultTestSettings }; });
 
 // only import after mocking!
 const fetch = require("node-fetch");
-const fs = jest.requireActual('fs');
-const settings = require("../../settings.js");
 
 // mock fetch
 fetch.mockImplementation(() =>
@@ -106,17 +88,17 @@ const setChatters = (newChatters) => {
 };
 
 beforeEach(() => {
+    // reset fetch
     fetch.mockClear();
     setChatters(defaultTestChatters);
-    replaceSettings(settings, defaultTestSettings);
-    // fake time
+
+    // reset time
     mockTime = new Date('2022-04-21T00:00:00Z');
     tk.freeze(mockTime);
-    // reset virtual file system
-    vol.reset();
 });
+
 // load index.js and test it being setup correctly
-function requireIndex(mockOriginalFs = undefined) {
+function requireIndex(mockFs = undefined, mockSettings = undefined) {
     let fs;
     let settings;
     let chatbot;
@@ -134,19 +116,26 @@ function requireIndex(mockOriginalFs = undefined) {
                 return chance.random();
             });
 
-        // reuse filesystem when restarting
-        if (mockOriginalFs !== undefined) {
-            jest.mock('fs', () => mockOriginalFs);
+        // create virtual file system
+        if (mockFs === undefined) {
+            mockFs = new Volume();
+            mockFs.mkdirSync(path.resolve('.'), { recursive: true });
         }
-
         // setup virtual file system
+        jest.mock('fs', () => mockFs);
         fs = require('fs');
-        // make sure that the folder '.' exists in the virtual file system
-        // which is the folder that contains './queso.save'
-        fs.mkdirSync(path.resolve('.'), { recursive: true });
+
+        // setup settings mock
+        jest.mock('../../settings.js', () => { return {}; });
+
+        // import settings and replace them
+        settings = require('../../settings.js');
+        if (mockSettings === undefined) {
+            mockSettings = defaultTestSettings;
+        }
+        replaceSettings(settings, mockSettings);
 
         // import libraries
-        settings = require('../../settings.js');
         chatbot = require('../../chatbot.js');
         const queue = require('../../queue.js');
 
@@ -160,40 +149,35 @@ function requireIndex(mockOriginalFs = undefined) {
         expect(quesoqueueSpy).toHaveBeenCalledTimes(1);
         quesoqueue = quesoqueueSpy.mock.results[0].value;
         quesoqueueSpy.mockRestore();
+
+        // get hold of chatbot_helper
+        expect(chatbot.helper).toHaveBeenCalledTimes(1);
+        chatbot_helper = chatbot.helper.mock.results[0].value;
+
+        expect(chatbot_helper.setup).toHaveBeenCalledTimes(1)
+        expect(chatbot_helper.connect).toHaveBeenCalledTimes(1);
+        expect(chatbot_helper.setup).toHaveBeenCalledTimes(1);
+        expect(chatbot_helper.say).toHaveBeenCalledTimes(0);
+
+        // get hold of the handle function
+        // the first argument of setup has to be an AsyncFunction
+        expect(chatbot_helper.setup.mock.calls[0][0]).toBeInstanceOf(AsyncFunction);
+        handle_func = chatbot_helper.setup.mock.calls[0][0];
     });
 
-    // get hold of chatbot_helper
-    expect(chatbot.helper).toHaveBeenCalledTimes(1);
-    chatbot_helper = chatbot.helper.mock.results[0].value;
-
-    expect(chatbot_helper.setup).toHaveBeenCalledTimes(1)
-    expect(chatbot_helper.connect).toHaveBeenCalledTimes(1);
-    expect(chatbot_helper.setup).toHaveBeenCalledTimes(1);
-    expect(chatbot_helper.say).toHaveBeenCalledTimes(0);
-
-    // get hold of the handle function
-    // the first argument of setup has to be an AsyncFunction
-    expect(chatbot_helper.setup.mock.calls[0][0]).toBeInstanceOf(AsyncFunction);
-    handle_func = chatbot_helper.setup.mock.calls[0][0];
-
     return {
-        handle_func: handle_func,
-        random: random,
-        fs: fs,
-        settings: settings,
-        chatbot_helper: chatbot_helper,
-        quesoqueue: quesoqueue,
+        fs,
+        settings,
+        chatbot,
+        chatbot_helper,
+        random,
+        quesoqueue,
+        handle_func,
     };
 };
 
 const build_chatter = function (username, displayName, isSubscriber, isMod, isBroadcaster) {
-    return {
-        username: username,
-        displayName: displayName,
-        isSubscriber: isSubscriber,
-        isMod: isMod,
-        isBroadcaster: isBroadcaster
-    }
+    return { username, displayName, isSubscriber, isMod, isBroadcaster };
 }
 
 test('setup', () => {
@@ -230,7 +214,7 @@ const parseMessage = (line) => {
         const idx = user.lastIndexOf('(');
         const maybeUsername = user.substring(idx + 1, user.length - 1).trim();
         user = user.substring(0, idx).trim();
-        if (!pronouns.has(maybeUsername)) {
+        if (!isPronoun(maybeUsername)) {
             // found username!
             username = maybeUsername;
         }
@@ -259,8 +243,7 @@ for (const file of testFiles) {
 
     const fileName = path.relative('.', path.resolve(__dirname, `logs/${file}`));
     test(fileName, async () => {
-        var index = requireIndex();
-        var handler = index.handle_func;
+        let test = requireIndex();
 
         var replyMessageQueue = [];
 
@@ -270,7 +253,7 @@ for (const file of testFiles) {
             replyMessageQueue.push({ message: message, error: error });
         }
 
-        index.chatbot_helper.say.mockImplementation(pushMessageWithStack);
+        test.chatbot_helper.say.mockImplementation(pushMessageWithStack);
 
         const fileStream = fs.createReadStream(fileName);
 
@@ -300,28 +283,27 @@ for (const file of testFiles) {
                 };
             };
             if (command == 'restart') {
-                index = requireIndex(index.fs);
-                handler = index.handle_func;
-                index.chatbot_helper.say.mockImplementation(pushMessageWithStack);
+                test = requireIndex(test.fs, test.settings);
+                test.chatbot_helper.say.mockImplementation(pushMessageWithStack);
             } else if (command == 'settings') {
-                replaceSettings(index.settings, JSON.parse(rest));
+                replaceSettings(test.settings, JSON.parse(rest));
             } else if (command == 'chatters') {
                 setChatters(JSON.parse(rest));
             } else if (command == 'queso.save') {
                 try {
-                    expect(JSON.parse(index.fs.readFileSync(path.resolve(__dirname, '../../queso.save')))).toEqual(JSON.parse(rest));
+                    expect(JSON.parse(test.fs.readFileSync(path.resolve(__dirname, '../../queso.save')))).toEqual(JSON.parse(rest));
                 } catch (error) {
                     error.message += errorMessage(position());
                     throw error;
                 }
             } else if (command == 'seed') {
                 const chance = jestChance.getChance(rest);
-                index.random
+                test.random
                     .mockImplementation(() => {
                         return chance.random();
                     });
             } else if (command == 'random') {
-                index.random
+                test.random
                     .mockImplementationOnce(() => parseFloat(rest));
             } else if (command.startsWith('[') && command.endsWith(']')) {
                 setTime(command.substring(1, command.length - 1));
@@ -334,7 +316,8 @@ for (const file of testFiles) {
                     };
                 };
                 // console.log(`${time}`, chat.sender, 'sends', chat.message);
-                if (chat.sender.username == index.settings.username.toLowerCase()) {
+                // console.log("sender", chat.sender.username, "settings", index.settings.username.toLowerCase());
+                if (chat.sender.username == test.settings.username.toLowerCase()) {
                     // this is a message by the chat bot, check replyMessageQueue
                     let shift = replyMessageQueue.shift();
                     if (shift === undefined) {
@@ -352,7 +335,7 @@ for (const file of testFiles) {
                         throw error;
                     }
                 } else {
-                    await handler(chat.message, chat.sender, index.chatbot_helper.say);
+                    await test.handle_func(chat.message, chat.sender, test.chatbot_helper.say);
                 }
             } else {
                 fail(`unexpected line "${line}" in file ${fileName}`);
