@@ -224,7 +224,7 @@ async function HandleMessage(message, sender, respond) {
         }
       }
       respond(
-        quesoqueue.add(Level(level_code, sender.displayName, sender.username))
+        await quesoqueue.add(Level(level_code, sender.displayName, sender.username))
       );
     } else {
       respond("Sorry, the queue is closed right now.");
@@ -232,9 +232,9 @@ async function HandleMessage(message, sender, respond) {
   } else if (message.startsWith("!remove") || message.startsWith("!leave")) {
     if (sender.isBroadcaster) {
       var to_remove = get_remainder(message);
-      respond(quesoqueue.modRemove(to_remove));
+      respond(await quesoqueue.modRemove(to_remove));
     } else {
-      respond(quesoqueue.remove(sender.displayName));
+      respond(await quesoqueue.remove(sender.displayName));
     }
   } else if (
     message.startsWith("!replace") ||
@@ -248,7 +248,7 @@ async function HandleMessage(message, sender, respond) {
         level_code = customCodesMap.get(level_code)
       }
     }
-    respond(quesoqueue.replace(sender.displayName, level_code));
+    respond(await quesoqueue.replace(sender.displayName, level_code));
   } else if (message == "!level" && sender.isBroadcaster) {
     let next_level = undefined;
     let selection_mode = settings.level_selection[selection_iter++];
@@ -362,7 +362,7 @@ async function HandleMessage(message, sender, respond) {
       level_timer.restart();
       level_timer.pause();
     }
-    var dip_level = quesoqueue.dip(username);
+    var dip_level = await quesoqueue.dip(username);
     if (dip_level !== undefined) {
       if (dip_level.code == "R0M-HAK-LVL") {
         respond(
@@ -447,7 +447,7 @@ async function HandleMessage(message, sender, respond) {
     quesoqueue.load();
     respond(level_list_message(quesoqueue.current(), await quesoqueue.list()));
   } else if (message == "!clear" && sender.isBroadcaster) {
-    quesoqueue.clear();
+    await quesoqueue.clear();
     respond("The queue has been cleared!");
   } else if (
     (message.startsWith("!customcode") || message == "!customcodes") &&

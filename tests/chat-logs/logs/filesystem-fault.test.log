@@ -7,6 +7,9 @@ chatters {"_links":{},"chatter_count":4,"chatters":{"broadcaster":["liquidnya"],
 # @ moderator
 # % subscriber
 
+# set test timer accuracy to 1 minute to accuratly test the weight
+accuracy 1000
+
 [02:19:13] ~%?liquidnya: !open
 [02:19:14] @^helperblock: The queue is now open!
 
@@ -24,7 +27,7 @@ queue.json/queue [{"code":"NB0-1MD-SLG","submitter":"FurretWalkBot","username":"
 # this message is important, such that the next writeSync is not because of a timer
 [02:39:13] ~%?liquidnya: UwU
 
-fs-fail writeSync
+fs-async-fail write
 
 [02:39:13] ~%?liquidnya: !add MY2-H2M-DSG
 [02:39:13] @^helperblock: liquidnya, MY2-H2M-DSG has been added to the queue.

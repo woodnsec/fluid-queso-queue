@@ -7,7 +7,7 @@ const { fail } = require('assert');
 const path = require('path');
 const fs = require('fs');
 const { codeFrameColumns } = require('@babel/code-frame');
-const { simRequireIndex, simSetTime, simSetChatters, buildChatter, fetchMock, START_TIME, EMPTY_CHATTERS } = require('../simulation.js');
+const { simRequireIndex, simSetTime, simSetChatters, buildChatter, flushPromises, fetchMock, START_TIME, EMPTY_CHATTERS } = require('../simulation.js');
 
 const isPronoun = (text) => {
     return text == 'Any' || text == 'Other' || text.includes('/');
@@ -31,7 +31,8 @@ beforeEach(() => {
 });
 
 test('setup', () => {
-    simRequireIndex();
+    let test = simRequireIndex();
+    test.quesoqueue.stop();
 });
 
 const parseMessage = (line) => {
@@ -136,7 +137,8 @@ for (const file of testFiles) {
                 };
             };
             if (command == 'restart') {
-                test = simRequireIndex(test.fs, test.settings, new Date());
+                test.quesoqueue.stop();
+                test = simRequireIndex(test.mockFs, test.settings, new Date());
                 test.chatbot_helper.say.mockImplementation(pushMessageWithStack);
             } else if (command == 'accuracy') {
                 accuracy = parseInt(rest);
@@ -168,6 +170,14 @@ for (const file of testFiles) {
                     .mockImplementationOnce(() => parseFloat(rest));
             } else if (command == 'fs-fail') {
                 jest.spyOn(test.fs, rest).mockImplementationOnce((a, b, c, d = undefined, e = undefined) => { throw new Error('fail on purpose in test'); });
+            } else if (command == 'fs-async-fail') {
+                jest.spyOn(test.fs, rest).mockImplementationOnce((fd, buffer, options, callback = undefined) => {
+                    console.error("write to file", buffer);
+                    if (callback === undefined) {
+                        callback = options;
+                    }
+                    callback(new Error('fail on purpose in test'), 0, buffer);
+                });
             } else if (command.startsWith('[') && command.endsWith(']')) {
                 await simSetTime(command.substring(1, command.length - 1), accuracy);
                 // const time = new Date();
@@ -209,6 +219,10 @@ for (const file of testFiles) {
                 fail(`unexpected line "${line}" in file ${fileName}`);
             }
         }
+
+        test.quesoqueue.stop();
+        await flushPromises();
+
         // replyMessageQueue should be empty now!
         try {
             expect(replyMessageQueue.map(m => m.message)).toEqual([]);

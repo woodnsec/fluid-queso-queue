@@ -2,7 +2,7 @@
 
 // imports
 const jestChance = require('jest-chance');
-const { Volume } = require('memfs');
+const { Volume, createFsFromVolume } = require('memfs');
 const path = require('path');
 
 // constants
@@ -127,7 +127,8 @@ function simRequireIndex(mockFs = undefined, mockSettings = undefined, mockTime 
                 mockFs.fromJSON(files);
             }
             // setup virtual file system
-            jest.mock('fs', () => mockFs);
+            const mockFsAsFs = createFsFromVolume(mockFs);
+            jest.mock('fs', () => mockFsAsFs);
             fs = require('fs');
 
             // write settings.json file
@@ -170,6 +171,7 @@ function simRequireIndex(mockFs = undefined, mockSettings = undefined, mockTime 
     } catch (err) {
         err.simIndex = {
             fs,
+            mockFs,
             settings,
             chatbot,
             chatbot_helper,
@@ -182,6 +184,7 @@ function simRequireIndex(mockFs = undefined, mockSettings = undefined, mockTime 
 
     return {
         fs,
+        mockFs,
         settings,
         chatbot,
         chatbot_helper,
@@ -192,7 +195,7 @@ function simRequireIndex(mockFs = undefined, mockSettings = undefined, mockTime 
 };
 
 const flushPromises = () => {
-    return new Promise(jest.requireActual("timers").setImmediate);
+    return new Promise(resolve => jest.requireActual('timers').setImmediate(resolve));
 };
 
 /**
@@ -209,10 +212,12 @@ const simAdvanceTime = async (ms, accuracy = 0) => {
             const advance = Math.min(accuracy, ms - i);
             jest.advanceTimersByTime(advance);
             await flushPromises();
+            await Promise.resolve();
         }
     } else {
         jest.advanceTimersByTime(ms);
         await flushPromises();
+        await Promise.resolve();
     }
 };
 
@@ -254,6 +259,7 @@ module.exports = {
     simSetChatters,
     buildChatter,
     createMockFs,
+    flushPromises,
     fetchMock: fetch,
     START_TIME,
     DEFAULT_TEST_SETTINGS,

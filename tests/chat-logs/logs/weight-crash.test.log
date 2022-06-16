@@ -8,7 +8,7 @@ chatters {"_links":{},"chatter_count":4,"chatters":{"broadcaster":["liquidnya"],
 # % subscriber
 
 # set test timer accuracy to 1 minute to accuratly test the weight
-accuracy 60000
+accuracy 1000
 
 [02:15:35] ~%?liquidnya: !clear
 [02:15:35] @^helperblock: The queue has been cleared!

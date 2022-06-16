@@ -1,6 +1,6 @@
 const settings = require('./settings.js');
 const twitch = require('./twitch.js').twitch();
-const { setIntervalAsync } = require('set-interval-async/dynamic');
+const { setIntervalAsync, clearIntervalAsync } = require('set-interval-async/dynamic');
 const persistence = require('./persistence.js');
 const standardBase30 = '0123456789abcdefghijklmnopqrst'
 const nintendoBase30 = '0123456789BCDFGHJKLMNPQRSTVWXY'
@@ -13,6 +13,7 @@ var waitingUsers;
 var userWaitTime;
 var userOnlineTime;
 var customCodesMap = new Map();
+var timerHandle = undefined;
 
 const delim = '[-. ]?';
 const code = '[A-Ha-hJ-Nj-nP-Yp-y0-9]{3}';
@@ -115,7 +116,7 @@ console.log("userWait time is " + userChance + " and the total odds are " + tota
 };
 
 const queue = {
-  add: (level) => {
+  add: async (level) => {
     if (settings.max_size && levels.length >= settings.max_size) {
       return "Sorry, the level queue is full!";
     }
@@ -138,7 +139,7 @@ const queue = {
         userWaitTime.push(1);
         userOnlineTime.push(now);
       }
-      queue.save();
+      await queue.saveAsync();
       if (level.code == 'R0M-HAK-LVL') {
         return level.submitter + ", your ROMhack has been added to the queue.";
       } else {
@@ -149,7 +150,7 @@ const queue = {
     }
   },
 
-  modRemove: (usernameArgument) => {
+  modRemove: async (usernameArgument) => {
     if (usernameArgument == '') {
       return "You can use !remove <username> to kick out someone else's level.";
     }
@@ -159,20 +160,20 @@ const queue = {
       return "No levels from " + usernameArgument + " were found in the queue.";
     }
     levels = levels.filter(level => !match(level));
-    queue.save();
+    await queue.saveAsync();
     return usernameArgument + "'s level has been removed from the queue.";
   },
 
-  remove: (username) => {
+  remove: async (username) => {
     if (current_level != undefined && current_level.submitter == username) {
       return "Sorry, we're playing that level right now!";
     }
     levels = levels.filter(x => x.submitter != username);
-    queue.save();
+    await queue.saveAsync();
     return username + ", your level has been removed from the queue.";
   },
 
-  replace: (username, new_level_code) => {
+  replace: async (username, new_level_code) => {
     let code = extractValidCode(new_level_code);
     new_level_code = code.code;
     if (!code.valid) {
@@ -181,7 +182,7 @@ const queue = {
     var old_level = levels.find(x => x.submitter == username);
     if (old_level != undefined) {
       old_level.code = new_level_code;
-      queue.save();
+      await queue.saveAsync();
       if (new_level_code == 'R0M-HAK-LVL') {
         return username + ", your level in the queue has been replaced with your ROMhack."
       } else {
@@ -189,7 +190,7 @@ const queue = {
       }
     } else if (current_level != undefined && current_level.submitter == username) {
       current_level.code = new_level_code;
-      queue.save();
+      await queue.saveAsync();
       if (new_level_code == 'R0M-HAK-LVL') {
         return username + ", your level in the queue has been replaced with your ROMhack."
       } else {
@@ -294,8 +295,8 @@ const queue = {
     }
     var top = current_level;
     current_level = undefined;
-    queue.add(top);
-    queue.save();
+    await queue.add(top);
+    await queue.saveAsync();
     return 'Ok, adding the current level back into the queue.';
   },
 
@@ -305,7 +306,7 @@ const queue = {
     }
     let response = 'Dismissed ' + current_level.code + ' submitted by ' + current_level.submitter + '.';
     current_level = undefined;
-    queue.save();
+    await queue.saveAsync();
     return response;
   },
 
@@ -321,7 +322,7 @@ const queue = {
     }
     var index = levels.findIndex(x => x.submitter == current_level.submitter);
     levels.splice(index, 1);
-    queue.save();
+    await queue.saveAsync();
     return current_level;
   },
 
@@ -336,7 +337,7 @@ const queue = {
     }
     var index = levels.findIndex(x => x.submitter == current_level.submitter);
     levels.splice(index, 1);
-    queue.save();
+    await queue.saveAsync();
     return current_level;
   },
 
@@ -351,17 +352,17 @@ const queue = {
     }
     var index = levels.findIndex(x => x.submitter == current_level.submitter);
     levels.splice(index, 1);
-    queue.save();
+    await queue.saveAsync();
     return current_level;
   },
 
-  dip: (usernameArgument) => {
+  dip: async (usernameArgument) => {
     var index = levels.findIndex(queue.matchUsername(usernameArgument));
     if (index != -1) {
       current_level = levels[index];
       queue.removeWaiting();
       levels.splice(index, 1);
-      queue.save();
+      await queue.saveAsync();
       return current_level;
     }
     return undefined;
@@ -396,7 +397,7 @@ const queue = {
     var index = levels.findIndex(x => x.submitter == current_level.submitter);
     queue.removeWaiting();
     levels.splice(index, 1);
-    queue.save();
+    await queue.saveAsync();
     return current_level;
   },
 
@@ -416,7 +417,7 @@ const queue = {
     var index = levels.findIndex(x => x.submitter == current_level.submitter);
     queue.removeWaiting();
     levels.splice(index, 1);
-    queue.save();
+    await queue.saveAsync();
     return current_level;
   },
 
@@ -436,7 +437,7 @@ const queue = {
     var index = levels.findIndex(x => x.submitter == current_level.submitter);
     queue.removeWaiting();
     levels.splice(index, 1);
-    queue.save();
+    await queue.saveAsync();
     return current_level;
   },
 
@@ -480,7 +481,7 @@ const queue = {
 
     var index = levels.findIndex(x => x.username == current_level.username);
     levels.splice(index, 1);
-    queue.save();
+    await queue.saveAsync();
 
     let selectionChance = await selectionchance(current_level.username, current_level.submitter);
 
@@ -586,14 +587,9 @@ const queue = {
     }
   },
 
-  save: () => {
-    persistence.saveQueueSync(current_level, levels, persistence.waitingToObject(waitingUsers, userWaitTime, userOnlineTime));
+  saveAsync: async () => {
+    await persistence.saveQueue(current_level, levels, persistence.waitingToObject(waitingUsers, userWaitTime, userOnlineTime));
   },
-
-  // TODO: could be used instead of the sync variant
-  // saveAsync: async () => {
-  //   await persistence.saveQueue(current_level, levels, persistence.waitingToObject(waitingUsers, userWaitTime, userOnlineTime));
-  // },
 
   load: () => {
     if (loaded) {
@@ -626,9 +622,13 @@ const queue = {
     }
 
     // Start the waiting time timer
-    setIntervalAsync(queue.waitingTimerTick, 60000);
+    timerHandle = setIntervalAsync(queue.waitingTimerTick, 60000);
     
     loaded = true;
+  },
+
+  stop: () => {
+    clearIntervalAsync(timerHandle);
   },
 
   waitingTimerTick: async () => {
@@ -645,15 +645,13 @@ const queue = {
         userOnlineTime[userIndex] = now;
       }
     }
-    queue.save();
-    // TODO: use this instead?
-    // await queue.saveAsync();
+    await queue.saveAsync();
   },
 
-  clear: () => {
+  clear: async () => {
     current_level = undefined;
     levels = new Array();
-    queue.save();
+    await queue.saveAsync();
   }
 };
 
